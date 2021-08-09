@@ -45,19 +45,7 @@ class Authenticator(common.Plugin, interfaces.Authenticator):
 
     @classmethod
     def add_parser_arguments(cls, add):  # pylint: disable=arguments-differ
-        super(Authenticator, cls).add_parser_arguments(add,
-                                                       default_propagation_seconds=60)
-        add('credentials',
-            help=(
-                'Path to Azure DNS service account JSON file. If you already have a Service ' +
-                'Principal with the required permissions, you can create your own file as per ' +
-                'the JSON file format at {0}. ' +
-                'Otherwise, you can create a new Service Principal using the Azure CLI ' +
-                '(available at {1}) by running "az login" then "{2}"' +
-                'This will create file "mycredentials.json" which you should secure, then ' +
-                'specify with this option or with the AZURE_AUTH_LOCATION environment variable.')
-            .format(ACCT_URL, AZURE_CLI_URL, AZURE_CLI_COMMAND),
-            default=None)
+        super(Authenticator, cls).add_parser_arguments(add)
         add('resource-group',
             help=('Resource Group in which the DNS zone is located'),
             default=None)

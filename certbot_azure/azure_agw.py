@@ -26,6 +26,7 @@ from azure.common.client_factory import get_client_from_auth_file
 from azure.mgmt.resource import ResourceManagementClient
 from azure.mgmt.network import NetworkManagementClient
 from msrestazure.azure_exceptions import CloudError
+from azure.identity import CredentialUnavailableError
 from .cred_wrapper import CredentialWrapper
 
 
@@ -139,7 +140,11 @@ class _AzureClient(object):
     def __init__(self, resource_group, subscription_id):
         self.resource_group = resource_group
 
-        self.credential = CredentialWrapper()
+        try:
+            self.credential = CredentialWrapper()
+        except CredentialUnavailableError as e:
+            errors.PluginError('Unable to acquire identity')
+
         self.resource_client = ResourceManagementClient(self.credential, subscription_id)
         self.network_client = NetworkManagementClient(self.credential, subscription_id)
 
