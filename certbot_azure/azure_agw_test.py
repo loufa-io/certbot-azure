@@ -1,4 +1,4 @@
-"""Tests for certbot_dns_azure.dns_azure."""
+"""Tests for certbot_azure.dns_azure."""
 
 import os
 import unittest

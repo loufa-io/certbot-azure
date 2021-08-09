@@ -20,13 +20,13 @@ import zope.interface
 
 from certbot import interfaces
 from certbot import errors
-
 from certbot.plugins import common
 
 from azure.common.client_factory import get_client_from_auth_file
 from azure.mgmt.resource import ResourceManagementClient
 from azure.mgmt.network import NetworkManagementClient
 from msrestazure.azure_exceptions import CloudError
+from .cred_wrapper import CredentialWrapper
 
 
 MSDOCS = 'https://docs.microsoft.com/'
@@ -39,37 +39,28 @@ AZURE_CLI_COMMAND = ("az ad sp create-for-rbac"
 
 logger = logging.getLogger(__name__)
 
-@zope.interface.implementer(interfaces.IInstaller)
-@zope.interface.provider(interfaces.IPluginFactory)
-class Installer(common.Plugin):
+
+class Installer(common.Plugin, interfaces.Installer):
 
     description = "Certbot Azure Installer"
 
     @classmethod
     def add_parser_arguments(cls, add):
-        add('credentials',
-            help=(
-                'Path to Azure service account JSON file. If you already have a Service ' +
-                'Principal with the required permissions, you can create your own file as per ' +
-                'the JSON file format at {0}. ' +
-                'Otherwise, you can create a new Service Principal using the Azure CLI ' +
-                '(available at {1}) by running "az login" then "{2}"' +
-                'This will create file "mycredentials.json" which you should secure, then ' +
-                'specify with this option or with the AZURE_AUTH_LOCATION environment variable.')
-            .format(ACCT_URL, AZURE_CLI_URL, AZURE_CLI_COMMAND),
-            default=None)
         add('resource-group',
             help=('Resource Group in which the DNS zone is located'),
             default=None)
         add('app-gateway-name',
             help=('Name of the application gateway'),
             default=None)
+        add('subscription-id',
+            help=('ID of the subscription containing the DNS Zone or Application Gateway'),
+            default=None)
 
     def __init__(self, *args, **kwargs):
         super(Installer, self).__init__(*args, **kwargs)
         self._setup_credentials()
 
-        self.azure_client = _AzureClient(self.conf('resource-group'), self.conf('credentials'))
+        self.azure_client = _AzureClient(self.conf('resource-group'), self.conf('subscription-id'))
 
 
     def _setup_credentials(self):
@@ -78,15 +69,12 @@ class Installer(common.Plugin):
                                      '--azure-agw-resource-group <RESOURCEGROUP>')
 
         if self.conf('app-gateway-name') is None:
-            raise errors.PluginError('Please specify the app gateway name '
+            raise errors.PluginError('Please specify the app gateway name using'
                                      '--azure-agw-resource-group <RESOURCEGROUP>')
 
-        if self.conf(
-                'credentials') is None and 'AZURE_AUTH_LOCATION' not in os.environ:
+        if self.conf('subscription-id') is None:
             raise errors.PluginError(
-                'Please specify credentials file using the '
-                'AZURE_AUTH_LOCATION environment variable or '
-                'using --azure-agw-credentials <file>')
+                'Please specify your subscription id with --azure-agw-subscription-id')
 
     def prepare(self):  # pylint: disable=missing-docstring,no-self-use
         pass  # pragma: no cover
@@ -137,10 +125,10 @@ class Installer(common.Plugin):
         """
 
         # Run deploy_cert with the lineage params
-        self.deploy_cert(lineage.names()[0], lineage.cert_path, lineage.key_path, lineage.chain_path, lineage.fullchain_path)
+        self.deploy_cert(
+            lineage.names()[0], lineage.cert_path, lineage.key_path, lineage.chain_path, lineage.fullchain_path)
 
         return
-
 
 
 class _AzureClient(object):
@@ -148,14 +136,12 @@ class _AzureClient(object):
     Encapsulates all communication with the Azure Cloud DNS API.
     """
 
-    def __init__(self, resource_group, account_json=None):
+    def __init__(self, resource_group, subscription_id):
         self.resource_group = resource_group
-        self.resource_client = get_client_from_auth_file(ResourceManagementClient,
-                                                    auth_path=account_json)
-        self.network_client = get_client_from_auth_file(NetworkManagementClient,
-                                                    auth_path=account_json)
 
-
+        self.credential = CredentialWrapper()
+        self.resource_client = ResourceManagementClient(self.credential, subscription_id)
+        self.network_client = NetworkManagementClient(self.credential, subscription_id)
 
     def update_agw(self, agw_name, domain, key_path, fullchain_path):
         from azure.mgmt.network.models import ApplicationGatewaySslCertificate

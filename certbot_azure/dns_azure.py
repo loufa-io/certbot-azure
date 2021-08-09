@@ -9,10 +9,12 @@ from azure.common.client_factory import get_client_from_auth_file
 from azure.mgmt.dns.models import RecordSet, TxtRecord
 from msrestazure.azure_exceptions import CloudError
 
+from .cred_wrapper import CredentialWrapper
+
 
 from certbot import errors
 from certbot import interfaces
-from certbot.plugins import dns_common
+from certbot.plugins import common, dns_common
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +27,8 @@ AZURE_CLI_COMMAND = ("az ad sp create-for-rbac"
                      " > mycredentials.json")
 
 
-@zope.interface.implementer(interfaces.IAuthenticator)
-@zope.interface.provider(interfaces.IPluginFactory)
-class Authenticator(dns_common.DNSAuthenticator):
+
+class Authenticator(common.Plugin, interfaces.Authenticator):
     """DNS Authenticator for Azure DNS
 
     This Authenticator uses the Azure DNS API to fulfill a dns-01 challenge.
@@ -60,6 +61,9 @@ class Authenticator(dns_common.DNSAuthenticator):
         add('resource-group',
             help=('Resource Group in which the DNS zone is located'),
             default=None)
+        add('subscription-id',
+            help=('Subscription ID in which the DNS zone is located'),
+            default=None)
 
     def more_info(self):  # pylint: disable=missing-docstring,no-self-use
         return 'This plugin configures a DNS TXT record to respond to a dns-01 challenge using ' + \
@@ -70,17 +74,10 @@ class Authenticator(dns_common.DNSAuthenticator):
             raise errors.PluginError('Please specify a resource group using '
                                      '--dns-azure-resource-group <RESOURCEGROUP>')
 
-        if self.conf(
-                'credentials') is None and 'AZURE_AUTH_LOCATION' not in os.environ:
-            raise errors.PluginError(
-                'Please specify credentials file using the '
-                'AZURE_AUTH_LOCATION environment variable or '
-                'using --dns-azure-credentials <file>')
-        else:
-            self._configure_file('credentials',
-                                 'path to Azure DNS service account JSON file')
+        if self.conf('resource-group') is None:
+            raise errors.PluginError('Please specify a subscription id using '
+                                     '--dns-azure-subscription id <SUBSCRIPTIONID>')
 
-            dns_common.validate_file_permissions(self.conf('credentials'))
 
     def _perform(self, domain, validation_name, validation):
         self._get_azure_client().add_txt_record(validation_name,
@@ -100,10 +97,11 @@ class _AzureClient(object):
     Encapsulates all communication with the Azure Cloud DNS API.
     """
 
-    def __init__(self, resource_group, account_json=None):
+    def __init__(self, resource_group, subscription_id, account_json=None):
         self.resource_group = resource_group
-        self.dns_client = get_client_from_auth_file(DnsManagementClient,
-                                                    auth_path=account_json)
+
+        self.credential = CredentialWrapper()
+        self.dns_client = DnsManagementClient(self.credential, subscription_id)
 
     def add_txt_record(self, domain, record_content, record_ttl):
         """

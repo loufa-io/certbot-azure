@@ -1,9 +1,10 @@
-certbot==1.6.0
+certbot==1.8.0
 adal==1.2.4
 azure-common==1.1.25
 azure-mgmt-network==11.0.0
 azure-mgmt-resource==10.1.0
 azure-mgmt-dns>=3.0.0
+azure-identity==1.6.0
 configobj==5.0.6
 coverage==5.2.1
 cryptography==3.2
@@ -23,3 +24,4 @@ PyOpenSSL==19.1.0
 zope.component==4.6.2
 zope.event==4.3
 zope.interface==5.1.0
+
